@@ -37,13 +37,13 @@ class Seq2Seq(nn.Module):
         self.fc = nn.Linear(n_hidden, n_class)
 
     def forward(self, enc_input, enc_hidden, dec_input):
-        enc_input = enc_input.transpose(0, 1) # enc_input: [max_len(=n_step, time step), batch_size, n_class]
-        dec_input = dec_input.transpose(0, 1) # dec_input: [max_len(=n_step, time step), batch_size, n_class]
+        enc_input = enc_input.transpose(0, 1)  # enc_input: [max_len(=n_step, time step), batch_size, n_class]
+        dec_input = dec_input.transpose(0, 1)  # dec_input: [max_len(=n_step, time step), batch_size, n_class]
 
         # enc_states : [num_layers(=1) * num_directions(=1), batch_size, n_hidden]
         _, enc_states = self.enc_cell(enc_input, enc_hidden)
         # outputs : [max_len+1(=6), batch_size, num_directions(=1) * n_hidden(=128)]
-        outputs, _ = self.dec_cell(dec_input, enc_states)
+        outputs, _ = self.dec_cell(dec_input, enc_states)  # teaching force
 
         model = self.fc(outputs) # model : [max_len+1(=6), batch_size, n_class]
         return model
@@ -54,10 +54,10 @@ if __name__ == '__main__':
 
     char_arr = [c for c in 'SEPabcdefghijklmnopqrstuvwxyz']
     num_dic = {n: i for i, n in enumerate(char_arr)}
-    seq_data = [['man', 'women'], ['black', 'white'], ['king', 'queen'], ['girl', 'boy'], ['up', 'down'], ['high', 'low']]
+    seq_data = [['man', 'woman'], ['black', 'white'], ['king', 'queen'], ['girl', 'boy'], ['up', 'down'], ['high', 'low']]
 
     n_class = len(num_dic)
-    batch_size = len(seq_data)
+    batch_size = len(seq_data)  # 6
 
     model = Seq2Seq()
 
@@ -66,7 +66,7 @@ if __name__ == '__main__':
 
     input_batch, output_batch, target_batch = make_batch()
 
-    for epoch in range(5000):
+    for epoch in range(1000):
         # make hidden shape [num_layers * num_directions, batch_size, n_hidden]
         hidden = torch.zeros(1, batch_size, n_hidden)
 
@@ -87,15 +87,27 @@ if __name__ == '__main__':
         optimizer.step()
 
     # Test
-    def translate(word, args):
-        input_batch, output_batch, _ = make_batch([[word, 'P' * len(word)]], args)
+    def translate(word):
+        input_batch, output_batch = [], []
+        word = word + 'P' * (n_step - len(word))
+        dec_input = ""
+        dec_input = dec_input + 'P' * (n_step - len(dec_input))
+
+        input = [num_dic[n] for n in word]
+        output = [num_dic[n] for n in ('S' + dec_input)]
+
+        input_batch.append(np.eye(n_class)[input])
+        output_batch.append(np.eye(n_class)[output])
+
+        input_batch = torch.FloatTensor(input_batch)
+        output_batch = torch.FloatTensor(output_batch)
 
         # make hidden shape [num_layers * num_directions, batch_size, n_hidden]
-        hidden = torch.zeros(1, 1, args.n_hidden)
+        hidden = torch.zeros(1, 1, n_hidden)
         output = model(input_batch, hidden, output_batch)
         # output : [max_len+1(=6), batch_size(=1), n_class]
 
-        predict = output.data.max(2, keepdim=True)[1] # select n_class dimension
+        predict = output.data.max(2, keepdim=True)[1]  # select n_class dimension
         decoded = [char_arr[i] for i in predict]
         end = decoded.index('E')
         translated = ''.join(decoded[:end])
